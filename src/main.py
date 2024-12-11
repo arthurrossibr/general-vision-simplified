@@ -200,7 +200,7 @@ def extract_dist_vs_arq(df):
     return df_dist_arq
 
 
-def extract_principal_subjects_per_year(df):
+def extract_principal_subjects_per_year(df, n=3):
     # Extrair o ano
     df["Ano"] = pd.to_datetime(df["dataDistribuicao"], errors="coerce").dt.year
 
@@ -221,7 +221,7 @@ def extract_principal_subjects_per_year(df):
     )
 
     # Manter apenas o assunto mais frequente por ano
-    df_top_assuntos = df_assuntos_contagem.groupby("Ano").head(3)
+    df_top_assuntos = df_assuntos_contagem.groupby("Ano").head(n)
 
     # Calcular o percentual de ocorrência
     total_por_ano = df_assuntos.groupby("Ano").size().rename("TotalAno")
@@ -363,6 +363,7 @@ def extract_data(df, term):
         {
             "assuntos_principais": extract_top_principal_subjects(df, True),
             "assuntos_principais_ano": extract_principal_subjects_per_year(df),
+            "assuntos_principais_ano_um": extract_principal_subjects_per_year(df, 1),
             "top_10_partes": extract_top_parties(df, 10),
         },
     )
@@ -457,6 +458,7 @@ def create_choropleth_map(
                 "#2A4C3F",
                 "#21332C",
             ],
+            height=385,
         )
         mapa.update_geos(
             fitbounds="locations", visible=True, showcoastlines=False, showcountries=False
@@ -514,10 +516,81 @@ def create_vertical_bar_chart(df):
             barmode="group",
             text_auto=True,
             labels={"Ano": "Ano", "value": "Total de Processos", "variable": "Status"},
-            color_discrete_sequence=["#45A874", "#2A4C3F"]
+            color_discrete_sequence=["#45A874", "#2A4C3F"],
+            height=385,
         )
-        fig.update_xaxes(tickangle=45, categoryorder="category ascending")
+        fig.update_xaxes(categoryorder="category ascending")
         st.plotly_chart(fig, use_container_width=True)
+
+def create_vertical_bar_chart_assuntos(df, title):
+    # Garantir que "Ano" seja tratado como categórico para manter a ordem correta
+    df["Ano"] = df["Ano"].astype(str)  # Converter para string para garantir que não haja lacunas
+
+    with st.container(border=1):
+        st.subheader(title)
+        fig = px.bar(
+            df,
+            x="Ano",
+            y="Total",
+            color="Assunto",
+            text="Percentual",
+            labels={"Ano": "Ano", "Total": "Frequência", "Assunto": "Assunto"},
+            color_discrete_sequence=[
+                "#45A874",  # Verde Claro
+                "#B49F74",  # Dourado
+                "#DCD2BD",  # Bege
+                "#2A4C3F",  # Verde Escuro
+                "#F4F3EE",  # Off-White
+            ],
+            height=385,
+        )
+        fig.update_traces(textposition="outside")
+        fig.update_layout(
+            barmode="group",  # Barras lado a lado
+            xaxis=dict(
+                title=None,
+                categoryorder="category ascending",  # Ordenar categorias no eixo X
+            ),
+            yaxis=dict(title="Total de Ocorrências"),
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
+
+def create_stacked_bar_chart_assuntos(df):
+    # Garantir que "Ano" seja tratado como categórico para manter a ordem correta
+    df["Ano"] = df["Ano"].astype(str)  # Converter para string para garantir que não haja lacunas
+
+    with st.container(border=1):
+        st.subheader("Principais Assuntos por Ano (Empilhados)")
+        fig = px.bar(
+            df,
+            x="Ano",
+            y="Total",
+            color="Assunto",
+            text="Percentual",
+            labels={"Ano": "Ano", "Total": "Frequência", "Assunto": "Assunto"},
+            color_discrete_sequence=[
+                "#45A874",  # Verde Claro
+                "#B49F74",  # Dourado
+                "#DCD2BD",  # Bege
+                "#2A4C3F",  # Verde Escuro
+                "#F4F3EE",  # Off-White
+            ],
+            height=385,
+        )
+        fig.update_traces(textposition="inside")  # Colocar os textos dentro das barras
+        fig.update_layout(
+            barmode="stack",  # Barras empilhadas
+            xaxis=dict(
+                title=None,
+                categoryorder="category ascending",  # Ordenar categorias no eixo X
+            ),
+            yaxis=dict(title="Total de Ocorrências"),
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
+
+
 
 
 def create_principal_subject_chart(df_assunto, key_prefix="assuntos"):
@@ -619,7 +692,6 @@ def render_dashboard(df, term):
             "Total",
         )
 
-
     with col1:
         create_horizontal_bar_chart(
             data["distribuicao_julgamento"],
@@ -644,12 +716,10 @@ def render_dashboard(df, term):
             "Total",
         )
 
-
     col1, col2 = st.columns(2)
 
     with col1:
         create_dataframe("Assuntos Principais", data["assuntos_principais"], 245)
-
         create_choropleth_map(
             data["df_estado"],
             load_geojson('resource/brazil_states.geojson'),
@@ -659,18 +729,14 @@ def render_dashboard(df, term):
             "UF",
             "Distribuição de Processo por Estado",
         )
-
-        create_dataframe("Principais 10 Partes Envolvidas", data["top_10_partes"], 385)
+        create_dataframe("Principais 10 Partes Envolvidas", data["top_10_partes"], 380)
+        create_vertical_bar_chart_assuntos(data["assuntos_principais_ano_um"], "Principais Assuntos por Ano - TOP 1")
 
     with col2:
         create_dataframe("Distribuição Por Classe Processual", data['distribuicao_classes'], 245)
-
         create_vertical_bar_chart(data['dist_arq'])
-
-        create_dataframe("Principais 3 Assuntos por Ano", data["assuntos_principais_ano"], 385)
-
-
-
+        create_vertical_bar_chart_assuntos(data["assuntos_principais_ano"], "Principais Assuntos por Ano")
+        create_stacked_bar_chart_assuntos(data["assuntos_principais_ano"])
 
 
 def main():
