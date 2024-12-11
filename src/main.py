@@ -200,6 +200,42 @@ def extract_dist_vs_arq(df):
     return df_dist_arq
 
 
+def extract_principal_subjects_per_year(df):
+    # Extrair o ano
+    df["Ano"] = pd.to_datetime(df["dataDistribuicao"], errors="coerce").dt.year
+
+    # Explodir e filtrar os assuntos principais
+    df_assuntos = (
+        df.explode("assuntosCNJ")
+        .dropna(subset=["assuntosCNJ"])
+        .loc[lambda x: x["assuntosCNJ"].apply(lambda item: isinstance(item, dict) and item.get("ePrincipal", False))]
+        .assign(Assunto=lambda x: x["assuntosCNJ"].apply(lambda item: item["titulo"]))
+    )
+
+    # Contar os assuntos por ano
+    df_assuntos_contagem = (
+        df_assuntos.groupby(["Ano", "Assunto"])
+        .size()
+        .reset_index(name="Total")
+        .sort_values(by=["Ano", "Total"], ascending=[True, False])
+    )
+
+    # Manter apenas o assunto mais frequente por ano
+    df_top_assuntos = df_assuntos_contagem.groupby("Ano").head(3)
+
+    # Calcular o percentual de ocorrência
+    total_por_ano = df_assuntos.groupby("Ano").size().rename("TotalAno")
+    df_top_assuntos = df_top_assuntos.merge(total_por_ano, on="Ano")
+    df_top_assuntos["Percentual"] = (df_top_assuntos["Total"] / df_top_assuntos["TotalAno"]) * 100
+    df_top_assuntos["Percentual"] = df_top_assuntos["Percentual"].apply(lambda x: f"{x:.2f}%")
+
+    # Selecionar colunas finais e converter o ano para inteiro
+    df_top_assuntos = df_top_assuntos[["Ano", "Assunto", "Total", "Percentual"]]
+    df_top_assuntos["Ano"] = df_top_assuntos["Ano"].astype(int).astype(str)
+
+    return df_top_assuntos
+
+
 def create_assuntos_df(df):
     df_assuntos = (
         df["assuntosCNJ"]
@@ -235,8 +271,6 @@ def extract_data(df, term):
     df = prepare_date_column(df, "statusPredictus.dataArquivamento")
 
     # ========================== Separar ativo e Passivo ===========================================================
-
-    print(df.columns)
 
     df_ativo = df[
         df["partes"].apply(
@@ -327,8 +361,10 @@ def extract_data(df, term):
 
     data.update(
         {
-            "assuntos_principais": extract_top_principal_subjects(df, True)
-    }
+            "assuntos_principais": extract_top_principal_subjects(df, True),
+            "assuntos_principais_ano": extract_principal_subjects_per_year(df),
+            "top_10_partes": extract_top_parties(df, 10),
+        },
     )
 
     # ========================== Dados para Mapa ===================================================================
@@ -449,7 +485,7 @@ def create_ranking_chart(data, title, x_col, y_col):
     st.plotly_chart(fig, use_container_width=True)
 
 
-def create_dataframe(subheader, df):
+def create_dataframe(subheader, df, height):
     with st.container(border=1):
         st.subheader(subheader)
 
@@ -461,7 +497,7 @@ def create_dataframe(subheader, df):
             }
         )
 
-        st.dataframe(styled_df, use_container_width=True, hide_index=True)
+        st.dataframe(styled_df, use_container_width=True, hide_index=True, height=height)
 
 
 def create_table(subheader, df):
@@ -612,7 +648,7 @@ def render_dashboard(df, term):
     col1, col2 = st.columns(2)
 
     with col1:
-        create_dataframe("Assuntos Principais", data["assuntos_principais"])
+        create_dataframe("Assuntos Principais", data["assuntos_principais"], 245)
 
         create_choropleth_map(
             data["df_estado"],
@@ -624,10 +660,14 @@ def render_dashboard(df, term):
             "Distribuição de Processo por Estado",
         )
 
+        create_dataframe("Principais 10 Partes Envolvidas", data["top_10_partes"], 385)
+
     with col2:
-        create_dataframe("Distribuição Por Classe Processual", data['distribuicao_classes'])
+        create_dataframe("Distribuição Por Classe Processual", data['distribuicao_classes'], 245)
 
         create_vertical_bar_chart(data['dist_arq'])
+
+        create_dataframe("Principais 3 Assuntos por Ano", data["assuntos_principais_ano"], 385)
 
 
 
