@@ -569,16 +569,16 @@ def create_vertical_bar_chart(df):
         # )
 
         # Adicionar linha para o valor de causa dos processos arquivados (escalado)
-        fig.add_scatter(
-            x=df["Ano"],
-            y=df["Valor de Causa Arquivados"],
-            mode="lines+markers+text",
-            name="Valor de Causa Arquivados",
-            line=dict(color="orange", width=2),
-            marker=dict(size=6),
-            text=df["Valor de Causa Arquivados"].apply(format_value),
-            textposition="top center",
-        )
+        # fig.add_scatter(
+        #     x=df["Ano"],
+        #     y=df["Valor de Causa Arquivados"],
+        #     mode="lines+markers+text",
+        #     name="Valor de Causa Arquivados",
+        #     line=dict(color="orange", width=2),
+        #     marker=dict(size=6),
+        #     text=df["Valor de Causa Arquivados"].apply(format_value),
+        #     textposition="top center",
+        # )
 
         fig.update_xaxes(categoryorder="category ascending")
         fig.update_layout(
