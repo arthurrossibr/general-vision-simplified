@@ -176,28 +176,40 @@ def extract_state_data(df):
 
 
 def extract_dist_vs_arq(df):
-    # Converta as colunas relevantes para datetime
     df["dataDistribuicao"] = pd.to_datetime(df["dataDistribuicao"], errors="coerce")
     df["statusPredictus.dataArquivamento"] = pd.to_datetime(
         df["statusPredictus.dataArquivamento"], errors="coerce"
     )
 
-    # Certifique-se de que os valores são datetime-like antes de acessar .dt
     if pd.api.types.is_datetime64_any_dtype(df["dataDistribuicao"]):
         distribuidos = df["dataDistribuicao"].dt.year.value_counts().rename("Distribuídos")
     else:
         distribuidos = pd.Series(dtype="int", name="Distribuídos")
+
+    print(distribuidos)
 
     if pd.api.types.is_datetime64_any_dtype(df["statusPredictus.dataArquivamento"]):
         arquivados = df["statusPredictus.dataArquivamento"].dt.year.value_counts().rename("Arquivados")
     else:
         arquivados = pd.Series(dtype="int", name="Arquivados")
 
-    # Combine as séries em um DataFrame
-    df_dist_arq = pd.concat([distribuidos, arquivados], axis=1).reset_index()
+    print(arquivados)
+
+    valor_distribuidos = (
+        df.groupby(df["dataDistribuicao"].dt.year)["valorCausa.valor"].sum().rename("Valor de Causa Distribuídos")
+    )
+    print(valor_distribuidos)
+
+    valor_arquivados = (
+        df.groupby(df["statusPredictus.dataArquivamento"].dt.year)["valorCausa.valor"].sum().rename("Valor de Causa Arquivados")
+    )
+    print(valor_arquivados)
+
+    df_dist_arq = pd.concat([distribuidos, arquivados, valor_distribuidos, valor_arquivados], axis=1).reset_index()
     df_dist_arq = df_dist_arq.rename(columns={"index": "Ano"})
 
     return df_dist_arq
+
 
 
 def extract_principal_subjects_per_year(df, n=3):
@@ -506,9 +518,15 @@ def create_table(subheader, df):
     st.subheader(subheader)
     st.table(df)
 
+
 def create_vertical_bar_chart(df):
     with st.container(border=1):
-        st.subheader(f"Processos Distribuídos x Processos Arquivados - Por Ano")
+        st.subheader(f"Processos Distribuídos x Processos Arquivados - Por Ano (com Valor de Causa)")
+
+        # Ordenar os anos e garantir que o eixo X seja categórico
+        df["Ano"] = pd.Categorical(df["Ano"], categories=sorted(df["Ano"].unique()), ordered=True)
+
+        # Gráfico de barras para processos distribuídos e arquivados
         fig = px.bar(
             df,
             x="Ano",
@@ -519,8 +537,58 @@ def create_vertical_bar_chart(df):
             color_discrete_sequence=["#45A874", "#2A4C3F"],
             height=385,
         )
+
+        # Obter o máximo do total de processos para dimensionar os valores de causa
+        max_processos = max(df["Distribuídos"].max(), df["Arquivados"].max())
+
+        # Escalar os valores de causa em relação ao máximo de processos
+        # df["Valor de Causa Distribuídos Scaled"] = (df["Valor de Causa Distribuídos"] / df["Valor de Causa Distribuídos"].max()) * max_processos
+        # df["Valor de Causa Arquivados Scaled"] = (df["Valor de Causa Arquivados"] / df["Valor de Causa Arquivados"].max()) * max_processos
+
+        # Formatação dos valores de causa (ex.: 10K, 10Mi, 10Bi)
+        def format_value(val):
+            if val >= 1_000_000_000:
+                return f"{val / 1_000_000_000:.1f}Bi"
+            elif val >= 1_000_000:
+                return f"{val / 1_000_000:.1f}Mi"
+            elif val >= 1_000:
+                return f"{val / 1_000:.1f}K"
+            else:
+                return f"{val:.1f}"
+
+        # Adicionar linha para o valor de causa dos processos distribuídos (escalado)
+        # fig.add_scatter(
+        #     x=df["Ano"],
+        #     y=df["Valor de Causa Distribuídos"],
+        #     mode="lines+markers+text",
+        #     name="Valor de Causa Distribuídos",
+        #     line=dict(color="blue", width=2),
+        #     marker=dict(size=6),
+        #     text=df["Valor de Causa Distribuídos"].apply(format_value),
+        #     textposition="top center",
+        # )
+
+        # Adicionar linha para o valor de causa dos processos arquivados (escalado)
+        fig.add_scatter(
+            x=df["Ano"],
+            y=df["Valor de Causa Arquivados"],
+            mode="lines+markers+text",
+            name="Valor de Causa Arquivados",
+            line=dict(color="orange", width=2),
+            marker=dict(size=6),
+            text=df["Valor de Causa Arquivados"].apply(format_value),
+            textposition="top center",
+        )
+
         fig.update_xaxes(categoryorder="category ascending")
+        fig.update_layout(
+            yaxis=dict(title="Total de Processos"),
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        )
+
         st.plotly_chart(fig, use_container_width=True)
+
+
 
 def create_vertical_bar_chart_assuntos(df, title):
     # Garantir que "Ano" seja tratado como categórico para manter a ordem correta
@@ -745,10 +813,6 @@ def main():
         "resource/dados_empresa2.json",
         "resource/dados_empresa3.json",
     ]
-
-    # arquivos_json = [
-    #     "src/dados_empresa1.json",
-    # ]
 
     df = load_data(arquivos_json)
 
