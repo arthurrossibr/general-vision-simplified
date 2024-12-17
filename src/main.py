@@ -6,7 +6,42 @@ import plotly.express as px
 import streamlit as st
 from babel.numbers import format_currency
 from unidecode import unidecode
+FAIXAS_MESES_ORDEM = [
+        "0 a 3 meses",
+        "4 a 6 meses",
+        "7 a 9 meses",
+        "10 a 12 meses",
+        "13 a 15 meses",
+        "16 a 18 meses",
+        "19 a 21 meses",
+        "22 a 24 meses",
+        "24+ meses"
+    ]
 
+FAIXAS_MESES_COLORS = [
+    "#45A874",  # Verde Claro
+    "#B49F74",  # Dourado
+    "#DCD2BD",  # Bege
+    "#2A4C3F",  # Verde Escuro
+    "#F4F3EE",  # Off-White
+]
+
+FAIXAS_VALOR_ORDEM = [
+    "Até R$5 mil",
+    "R$5 a R$20 mil",
+    "R$20 a R$50 mil",
+    "R$50 a R$100 mil",
+    "Acima de R$100 mil"
+]
+
+# Definir a paleta de cores correspondente
+FAIXAS_VALOR_COLORS = [
+    "#45A874",  # Verde Claro
+    "#B49F74",  # Dourado
+    "#DCD2BD",  # Bege
+    "#2A4C3F",  # Verde Escuro
+    "#F4F3EE",  # Off-White
+]
 
 def format_currency_brl(value):
     return format_currency(value, "BRL", locale="pt_BR")
@@ -391,6 +426,122 @@ def extract_data(df, term):
         }
     )
 
+    # Definir a ordem das faixas de meses
+
+
+    # ========================== Dias até ===================================================================
+    df['statusPredictus.dataTransitoJulgado'] = pd.to_datetime(df['statusPredictus.dataTransitoJulgado'],
+                                                               errors='coerce')
+    df['dataDistribuicao'] = pd.to_datetime(df['dataDistribuicao'], errors='coerce')
+
+    # Processamento para Transito Julgado
+    df_transito = df[~df['statusPredictus.dataTransitoJulgado'].isna()].copy()
+    df_transito['diasAteArquivamento'] = (
+            df_transito['statusPredictus.dataTransitoJulgado'] - df_transito['dataDistribuicao']
+    ).dt.days
+
+    bins = [0, 90, 180, 270, 360, 450, 540, 630, 720, float('inf')]
+    labels = FAIXAS_MESES_ORDEM
+
+    df_transito['faixaMeses'] = pd.cut(
+        df_transito['diasAteArquivamento'],
+        bins=bins,
+        labels=labels,
+        right=True,
+        include_lowest=True
+    )
+
+    # Garantir que 'faixaMeses' seja categórica com a ordem correta
+    df_transito['faixaMeses'] = pd.Categorical(
+        df_transito['faixaMeses'],
+        categories=FAIXAS_MESES_ORDEM,
+        ordered=True
+    )
+
+    # Calcular a contagem de cada faixa
+    contagem_transito = df_transito['faixaMeses'].value_counts().sort_index()
+    novo_df_meses_transito = contagem_transito.reset_index()
+    novo_df_meses_transito.columns = ['faixaMeses', 'contagem']
+
+    # Processamento para Arquivados
+    df['statusPredictus.dataArquivamento'] = pd.to_datetime(df['statusPredictus.dataArquivamento'], errors='coerce')
+    df_arquivado = df[~df['statusPredictus.dataArquivamento'].isna()].copy()
+    df_arquivado['diasAteArquivamento'] = (
+            df_arquivado['statusPredictus.dataArquivamento'] - df_arquivado['dataDistribuicao']
+    ).dt.days
+
+    df_arquivado['faixaMeses'] = pd.cut(
+        df_arquivado['diasAteArquivamento'],
+        bins=bins,
+        labels=labels,
+        right=True,
+        include_lowest=True
+    )
+
+    # Garantir que 'faixaMeses' seja categórica com a ordem correta
+    df_arquivado['faixaMeses'] = pd.Categorical(
+        df_arquivado['faixaMeses'],
+        categories=FAIXAS_MESES_ORDEM,
+        ordered=True
+    )
+
+    # Calcular a contagem de cada faixa
+    contagem_arquivado = df_arquivado['faixaMeses'].value_counts().sort_index()
+    novo_df_meses_arquivado = contagem_arquivado.reset_index()
+    novo_df_meses_arquivado.columns = ['faixaMeses', 'contagem']
+
+    # Atualizar o dicionário 'data' com os novos DataFrames
+    data.update(
+        {
+            "dias_ate_arquivamento": novo_df_meses_arquivado,
+            "dias_ate_transito_julgado": novo_df_meses_transito
+        }
+    )
+
+    # Categorizar 'valorCausa.valor'
+    df['valorCausa.valor'] = pd.to_numeric(df['valorCausa.valor'], errors='coerce').fillna(0)
+    df['faixaValor'] = pd.cut(
+        df['valorCausa.valor'],
+        bins=[0, 5000, 20000, 50000, 100000, float('inf')],
+        labels=FAIXAS_VALOR_ORDEM,
+        right=True,
+        include_lowest=True
+    )
+    df['faixaValor'] = pd.Categorical(
+        df['faixaValor'],
+        categories=FAIXAS_VALOR_ORDEM,
+        ordered=True
+    )
+    contagem_valor = df['faixaValor'].value_counts().sort_index()
+    novo_df_valor_causa = contagem_valor.reset_index()
+    novo_df_valor_causa.columns = ['faixaValor', 'contagem']
+
+    # Categorizar 'statusPredictus.valorExecucao.valor'
+    df['statusPredictus.valorExecucao.valor'] = pd.to_numeric(df['statusPredictus.valorExecucao.valor'],
+                                                              errors='coerce').fillna(0)
+    df['faixaValorExecucao'] = pd.cut(
+        df['statusPredictus.valorExecucao.valor'],
+        bins=[0, 5000, 20000, 50000, 100000, float('inf')],
+        labels=FAIXAS_VALOR_ORDEM,
+        right=True,
+        include_lowest=True
+    )
+    df['faixaValorExecucao'] = pd.Categorical(
+        df['faixaValorExecucao'],
+        categories=FAIXAS_VALOR_ORDEM,
+        ordered=True
+    )
+    contagem_execucao = df['faixaValorExecucao'].value_counts().sort_index()
+    novo_df_valor_execucao = contagem_execucao.reset_index()
+    novo_df_valor_execucao.columns = ['faixaValorExecucao', 'contagem']
+
+    data.update(
+        {
+            "totalValorCausa": novo_df_valor_causa,
+            "totalValorExecucao": novo_df_valor_execucao
+        }
+    )
+
     return data
 
 
@@ -450,6 +601,70 @@ def create_donut_chart(data, title, names_col, values_col):
         )
         # chart.update_traces(textinfo="label+percent+value")
         st.plotly_chart(chart, use_container_width=True)
+
+
+def create_vertical_bar_chart_custom_month(data, title, x_col, y_col):
+    with st.container(border=1):
+        st.subheader(title)
+        fig = px.bar(
+            data,
+            x=x_col,
+            y=y_col,
+            text=y_col,
+            color=x_col,  # Associa a cor às categorias do eixo X
+            color_discrete_sequence=FAIXAS_MESES_COLORS,
+            labels={x_col: "", y_col: ""},
+            height=385
+        )
+        fig.update_traces(texttemplate='%{text}', textposition='outside')
+        fig.update_layout(
+            xaxis=dict(
+                title=None,
+                categoryorder='array',          # Define a ordem personalizada
+                categoryarray=FAIXAS_MESES_ORDEM # Lista das categorias na ordem desejada
+            ),
+            yaxis=dict(title=y_col),
+            showlegend=False,
+            margin=dict(l=20, r=20, t=40, b=20)
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
+def create_vertical_bar_chart_custom(data, title, x_col, y_col, colors):
+    """
+    Cria um gráfico de barras verticais com a paleta de cores personalizada e ordenação específica.
+
+    Parameters:
+    - data (pd.DataFrame): DataFrame contendo os dados.
+    - title (str): Título do gráfico.
+    - x_col (str): Nome da coluna para o eixo X.
+    - y_col (str): Nome da coluna para o eixo Y.
+    - colors (list): Lista de cores para as barras.
+    """
+    with st.container(border=1):
+        st.subheader(title)
+        fig = px.bar(
+            data,
+            x=x_col,
+            y=y_col,
+            text=y_col,
+            color=x_col,  # Associa a cor às categorias do eixo X
+            color_discrete_sequence=colors,
+            labels={x_col: "", y_col: ""},
+            height=385
+        )
+        fig.update_traces(texttemplate='%{text}', textposition='outside')
+        fig.update_layout(
+            xaxis=dict(
+                title=None,
+                categoryorder='array',
+                categoryarray=FAIXAS_VALOR_ORDEM  # Ordem definida
+            ),
+            yaxis=dict(title=y_col),
+            showlegend=False,
+            margin=dict(l=20, r=20, t=40, b=20)
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
 
 
 def create_choropleth_map(
@@ -625,11 +840,14 @@ def create_vertical_bar_chart_assuntos(df, title):
 
 
 def create_stacked_bar_chart_assuntos(df):
-    # Garantir que "Ano" seja tratado como categórico para manter a ordem correta
-    df["Ano"] = df["Ano"].astype(str)  # Converter para string para garantir que não haja lacunas
+    # Verificar e corrigir a coluna "Ano"
+    if not pd.api.types.is_integer_dtype(df["Ano"]):
+        df = df.copy()
+        # Arredondar para o inteiro mais próximo
+        df["Ano"] = df["Ano"].round().astype(int).astype(str)
 
     with st.container(border=1):
-        st.subheader("Principais Assuntos por Ano (Empilhados)")
+        st.subheader("Principais Assuntos por Ano")
         fig = px.bar(
             df,
             x="Ano",
@@ -798,13 +1016,41 @@ def render_dashboard(df, term):
             "Distribuição de Processo por Estado",
         )
         create_dataframe("Principais 10 Partes Envolvidas", data["top_10_partes"], 380)
-        create_vertical_bar_chart_assuntos(data["assuntos_principais_ano_um"], "Principais Assuntos por Ano - TOP 1")
+        create_vertical_bar_chart_custom_month(
+            data['dias_ate_arquivamento'],
+            "Distribuição de Processos por Faixa de Meses até Arquivamento",
+            "faixaMeses",
+            "contagem"
+        )
+
+        create_vertical_bar_chart_custom(
+            data["totalValorCausa"],
+            "Distribuição de Processos por Faixa de Valor da Causa",
+            "faixaValor",
+            "contagem",
+            FAIXAS_VALOR_COLORS
+        )
 
     with col2:
         create_dataframe("Distribuição Por Classe Processual", data['distribuicao_classes'], 245)
         create_vertical_bar_chart(data['dist_arq'])
-        create_vertical_bar_chart_assuntos(data["assuntos_principais_ano"], "Principais Assuntos por Ano")
+        # create_vertical_bar_chart_assuntos(data["assuntos_principais_ano"], "Principais Assuntos por Ano")
         create_stacked_bar_chart_assuntos(data["assuntos_principais_ano"])
+        create_vertical_bar_chart_custom_month(
+            data['dias_ate_transito_julgado'],
+            "Distribuição de Processos por Faixa de Meses até Transito em Julgado",
+            "faixaMeses",
+            "contagem"
+        )
+
+        create_vertical_bar_chart_custom(
+            data["totalValorExecucao"],
+            "Distribuição de Execuções por Faixa de Valor",
+            "faixaValorExecucao",
+            "contagem",
+            FAIXAS_VALOR_COLORS
+        )
+
 
 
 def main():
