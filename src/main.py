@@ -841,10 +841,7 @@ def create_vertical_bar_chart_assuntos(df, title):
 
 def create_stacked_bar_chart_assuntos(df):
     # Verificar e corrigir a coluna "Ano"
-    if not pd.api.types.is_integer_dtype(df["Ano"]):
-        df = df.copy()
-        # Arredondar para o inteiro mais próximo
-        df["Ano"] = df["Ano"].round().astype(int).astype(str)
+    df["Ano"] = df["Ano"].astype(float).astype(int).astype(str)
 
     with st.container(border=1):
         st.subheader("Principais Assuntos por Ano")
@@ -853,7 +850,7 @@ def create_stacked_bar_chart_assuntos(df):
             x="Ano",
             y="Total",
             color="Assunto",
-            text="Percentual",
+            text="Total",
             labels={"Ano": "Ano", "Total": "Frequência", "Assunto": "Assunto"},
             color_discrete_sequence=[
                 "#45A874",  # Verde Claro
